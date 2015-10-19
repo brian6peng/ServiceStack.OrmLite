@@ -265,9 +265,16 @@ namespace ServiceStack.OrmLite
         public IOrmLiteConverter GetConverter(Type type)
         {
             IOrmLiteConverter converter;
-            return Converters.TryGetValue(type, out converter)
-                ? converter
-                : null;
+            bool flag = Converters.TryGetValue(type, out converter);
+            if (!flag)
+            {
+                var isEnum = type.IsEnum || type.GetType().IsEnum;
+                if (isEnum)
+                {
+                    converter = new EnumConverter();
+                }
+            }
+            return converter;
         }
 
         public IOrmLiteConverter GetConverterForType(Type type)

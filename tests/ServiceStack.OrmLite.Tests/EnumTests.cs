@@ -215,23 +215,6 @@ namespace ServiceStack.OrmLite.Tests
         }
 
         [Test]
-        public void Does_save_Enum_with_label_by_default()
-        {
-            using (var db = OpenDbConnection())
-            {
-                db.DropAndCreateTable<TypeWithEnum>();
-
-                db.Insert(new TypeWithEnum { Id = 1, EnumValue = SomeEnum.Value1 });
-                db.Insert(new TypeWithEnum { Id = 2, EnumValue = SomeEnum.Value2 });
-
-                var row = db.SingleFmt<TypeWithEnum>(
-                    "EnumValue".SqlColumn() + " = {0}", "Value2");
-
-                Assert.That(row.Id, Is.EqualTo(2));
-            }
-        }
-
-        [Test]
         public void Can_save_Enum_as_Integers()
         {
             using (JsConfig.With(treatEnumAsInteger: true))

@@ -2,41 +2,16 @@
 
 namespace ServiceStack.OrmLite.Converters
 {
-    public class EnumConverter : StringConverter
+    public class EnumConverter : IntegerConverter
     {
-        public EnumConverter() : base(255) {}
+        public override object ToDbValue(Type fieldType, object value)
+        {
+            return (int)value;
+        }
 
         public override string ToQuotedString(Type fieldType, object value)
         {
-            var isEnumFlags = fieldType.IsEnumFlags() ||
-                (!fieldType.IsEnum && fieldType.IsNumericType()); //i.e. is real int && not Enum
-
-            long enumValue;
-            if (!isEnumFlags && long.TryParse(value.ToString(), out enumValue))
-            {
-                value = Enum.ToObject(fieldType, enumValue).ToString();
-            }
-
-            var enumString = DialectProvider.StringSerializer.SerializeToString(value);
-
-            if (!isEnumFlags)
-                return DialectProvider.GetQuotedValue(enumString.Trim('"'));
-
-            return enumString;
-        }
-
-        public override object ToDbValue(Type fieldType, object value)
-        {
-            var enumValue = DialectProvider.StringSerializer.SerializeToString(value);
-            if (enumValue == null)
-                return null;
-
-            enumValue = enumValue.Trim('"');
-            long intEnum;
-            if (long.TryParse(enumValue, out intEnum))
-                return intEnum;
-
-            return enumValue;
+            return ((int)value).ToString();
         }
     }
 
