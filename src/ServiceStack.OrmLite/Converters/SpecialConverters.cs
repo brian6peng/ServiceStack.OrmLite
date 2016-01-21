@@ -4,7 +4,7 @@ namespace ServiceStack.OrmLite.Converters
 {
     public class EnumConverter : StringConverter
     {
-        public EnumConverter() : base(255) {}
+        public EnumConverter() : base(20) {}
 
         public override string ToQuotedString(Type fieldType, object value)
         {
