@@ -17,7 +17,7 @@
     <language>en-US</language> 
     <copyright>ServiceStack 2014 and contributors</copyright>
     <dependencies>
-      <dependency id="ServiceStack.OrmLite" version="4.0" />
+      <dependency id="ServiceStack.OrmLite" version="4.1.52" />
     </dependencies> 
   </metadata> 
   <files>

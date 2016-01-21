@@ -17,7 +17,7 @@
     <language>en-US</language> 
     <copyright>Copyright 2015 Service Stack</copyright>
     <dependencies>
-      <dependency id="ServiceStack.OrmLite.SqlServer" version="4.0" />
+      <dependency id="ServiceStack.OrmLite.SqlServer" version="4.1.52" />
       <dependency id="Microsoft.SqlServer.Types" version="11.0.2" />
     </dependencies> 
   </metadata> 
