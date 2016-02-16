@@ -301,10 +301,12 @@ namespace ServiceStack.OrmLite
         public virtual IOrmLiteConverter GetConverterBestMatch(FieldDefinition fieldDef)
         {
             var fieldType = Nullable.GetUnderlyingType(fieldDef.FieldType) ?? fieldDef.FieldType;
+
             if (fieldDef.IsRowVersion)
                 return RowVersionConverter;
 
             IOrmLiteConverter converter;
+
             if (Converters.TryGetValue(fieldType, out converter))
                 return converter;
 

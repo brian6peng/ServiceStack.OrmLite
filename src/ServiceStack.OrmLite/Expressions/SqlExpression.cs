@@ -21,6 +21,7 @@ namespace ServiceStack.OrmLite
         private string groupBy = string.Empty;
         private string havingExpression;
         private string orderBy = string.Empty;
+        private string[] onlyFields = null;
 
         public List<string> UpdateFields { get; set; }
         public List<string> InsertFields { get; set; }
@@ -71,6 +72,7 @@ namespace ServiceStack.OrmLite
             to.groupBy = groupBy;
             to.havingExpression = havingExpression;
             to.orderBy = orderBy;
+            to.onlyFields = onlyFields != null ? (string[])onlyFields.Clone() : null;
             to.UpdateFields = UpdateFields;
             to.InsertFields = InsertFields;
             to.modelDef = modelDef;
@@ -112,7 +114,40 @@ namespace ServiceStack.OrmLite
             {
                 this.selectExpression = "SELECT " + rawSelect;
                 this.CustomSelect = true;
+                onlyFields = null;
             }
+            return this;
+        }
+
+        /// <summary>
+        /// Set the specified selectExpression using matching fields.
+        /// </summary>
+        /// <param name='fields'>
+        /// Matching Fields: "SomeField1, SomeField2"
+        /// </param>
+        public virtual SqlExpression<T> Select(string[] fields)
+        {
+            if (fields == null || fields.Length == 0)
+                return Select(string.Empty);
+
+            var sb = new StringBuilder();
+            foreach (var field in fields)
+            {
+                var match = FirstMatchingField(field);
+                if (match == null)
+                    continue;
+
+                var qualifiedName = DialectProvider.GetQuotedColumnName(match.Item1, match.Item2);
+
+                if (sb.Length > 0)
+                    sb.Append(", ");
+
+                sb.Append(qualifiedName);
+            }
+
+            UnsafeSelect(sb.ToString());
+            onlyFields = fields;
+
             return this;
         }
 
@@ -568,6 +603,15 @@ namespace ServiceStack.OrmLite
             var orderBySql = Visit(keySelector).ToString();
             orderBySql.ParseTokens()
                 .Each(x => orderByProperties.Add(x + " DESC"));
+            BuildOrderByClauseInternal();
+            return this;
+        }
+
+        public virtual SqlExpression<T> OrderByDescending(string orderBy)
+        {
+            orderByProperties.Clear();
+            orderBy.SqlVerifyFragment();
+            orderByProperties.Add(orderBy + " DESC");
             BuildOrderByClauseInternal();
             return this;
         }
@@ -1476,6 +1520,7 @@ namespace ServiceStack.OrmLite
 
         private void BuildSelectExpression(string fields, bool distinct)
         {
+            onlyFields = null;
             selectDistinct = distinct;
 
             selectExpression = string.Format("SELECT {0}{1}",
@@ -1768,8 +1813,8 @@ namespace ServiceStack.OrmLite
 
             if (value != null)
             {
-                p.Value = DialectProvider.GetParamValue(value, value.GetType());
                 DialectProvider.InitDbParam(p, value.GetType());
+                p.Value = DialectProvider.GetParamValue(value, value.GetType());
             }
             else
             {
@@ -1867,8 +1912,8 @@ namespace ServiceStack.OrmLite
 
             if (value != null)
             {
-                to.Value = dialectProvider.GetParamValue(value, valueType);
                 dialectProvider.InitDbParam(to, valueType);
+                to.Value = dialectProvider.GetParamValue(value, valueType);
             }
             else
             {

@@ -149,6 +149,15 @@ namespace ServiceStack.OrmLite
         }
 
         /// <summary>
+        /// Returns a lazyily loaded stream of results using a parameterized query. E.g:
+        /// <para>db.SelectLazy(db.From&lt;Person&gt;().Where(x =&gt; x == 40))</para>
+        /// </summary>
+        public static IEnumerable<T> SelectLazy<T>(this IDbConnection dbConn, SqlExpression<T> expression)
+        {
+            return dbConn.ExecLazy(dbCmd => dbCmd.SelectLazy<T>(expression.ToSelectStatement(), expression.Params));
+        }
+
+        /// <summary>
         /// Returns a lazyily loaded stream of results using an SqlFilter query. E.g:
         /// <para>db.SelectLazyFmt&lt;Person&gt;("Age &gt; {0}", 40)</para>
         /// </summary>
@@ -424,7 +433,7 @@ namespace ServiceStack.OrmLite
         /// </summary>
         public static bool Exists<T>(this IDbConnection dbConn, Expression<Func<T, bool>> expression)
         {
-            return dbConn.Exec(dbCmd => dbCmd.Count(expression)) > 0;
+            return dbConn.Exec(dbCmd => dbCmd.Scalar(dbConn.From<T>().Where(expression).Limit(1).Select("'exists'"))) != null;
         }
 
         /// <summary>
@@ -433,7 +442,11 @@ namespace ServiceStack.OrmLite
         /// </summary>
         public static bool Exists<T>(this IDbConnection dbConn, Func<SqlExpression<T>, SqlExpression<T>> expression)
         {
-            return dbConn.Exec(dbCmd => dbCmd.Count(expression)) > 0;
+            return dbConn.Exec(dbCmd =>
+            {
+                var q = dbCmd.GetDialectProvider().SqlExpression<T>();
+                return dbCmd.Scalar(expression(q).Limit(1).Select("'exists'")) != null;
+            });
         }
 
         /// <summary>
@@ -442,7 +455,7 @@ namespace ServiceStack.OrmLite
         /// </summary>
         public static bool Exists<T>(this IDbConnection dbConn, SqlExpression<T> expression)
         {
-            return dbConn.Exec(dbCmd => dbCmd.Count(expression)) > 0;
+            return dbConn.Exec(dbCmd => dbCmd.Scalar(expression.Limit(1).Select("'exists'"))) != null;
         }
         /// <summary>
         /// Returns true if the Query returns any records, using an SqlFormat query. E.g:

@@ -416,7 +416,7 @@ namespace ServiceStack.OrmLite
         /// </summary>
         public static Task<bool> ExistsAsync<T>(this IDbConnection dbConn, Expression<Func<T, bool>> expression, CancellationToken token = default(CancellationToken))
         {
-            return dbConn.Exec(dbCmd => dbCmd.CountAsync(expression, token).Then(x => x > 0));
+            return dbConn.Exec(dbCmd => dbCmd.ScalarAsync(dbConn.From<T>().Where(expression).Limit(1).Select("'exists'"), token).Then(x => x != null));
         }
 
         /// <summary>
@@ -425,7 +425,12 @@ namespace ServiceStack.OrmLite
         /// </summary>
         public static Task<bool> ExistsAsync<T>(this IDbConnection dbConn, Func<SqlExpression<T>, SqlExpression<T>> expression, CancellationToken token = default(CancellationToken))
         {
-            return dbConn.Exec(dbCmd => dbCmd.CountAsync(expression, token).Then(x => x > 0));
+            return dbConn.Exec(dbCmd =>
+            {
+                var q = dbCmd.GetDialectProvider().SqlExpression<T>();
+                var sql = expression(q).Limit(1);
+                return dbCmd.SingleAsync<T>(sql, token).Then(x => x != null);
+            });
         }
 
         /// <summary>
@@ -434,7 +439,7 @@ namespace ServiceStack.OrmLite
         /// </summary>
         public static Task<bool> ExistsAsync<T>(this IDbConnection dbConn, SqlExpression<T> expression, CancellationToken token = default(CancellationToken))
         {
-            return dbConn.Exec(dbCmd => dbCmd.CountAsync(expression, token).Then(x => x > 0));
+            return dbConn.Exec(dbCmd => dbCmd.ScalarAsync(expression.Limit(1).Select("'exists'"), token).Then(x => x != null));
         }
         /// <summary>
         /// Returns true if the Query returns any records, using an SqlFormat query. E.g:
@@ -649,18 +654,27 @@ namespace ServiceStack.OrmLite
         /// Returns the first result with all its references loaded, using a primary key id. E.g:
         /// <para>db.LoadSingleById&lt;Person&gt;(1)</para>
         /// </summary>
-        public static Task<T> LoadSingleByIdAsync<T>(this IDbConnection dbConn, object idValue, CancellationToken token=default(CancellationToken))
+        public static Task<T> LoadSingleByIdAsync<T>(this IDbConnection dbConn, object idValue, string[] include = null, CancellationToken token=default(CancellationToken))
         {
-            return dbConn.Exec(dbCmd => dbCmd.LoadSingleByIdAsync<T>(idValue, token));
+            return dbConn.Exec(dbCmd => dbCmd.LoadSingleByIdAsync<T>(idValue, include, token));
+        }
+
+        /// <summary>
+        /// Returns the first result with all its references loaded, using a primary key id. E.g:
+        /// <para>db.LoadSingleById&lt;Person&gt;(1, include = x => new{ x.Address })</para>
+        /// </summary>
+        public static Task<T> LoadSingleByIdAsync<T>(this IDbConnection dbConn, object idValue, Func<T, object> include, CancellationToken token = default(CancellationToken))
+        {
+            return dbConn.Exec(dbCmd => dbCmd.LoadSingleByIdAsync<T>(idValue, include(typeof(T).CreateInstance<T>()).GetType().AllAnonFields(), token));
         }
 
         /// <summary>
         /// Loads all the related references onto the instance. E.g:
         /// <para>db.LoadReferencesAsync(customer)</para> 
         /// </summary>
-        public static Task LoadReferencesAsync<T>(this IDbConnection dbConn, T instance, CancellationToken token = default(CancellationToken))
+        public static Task LoadReferencesAsync<T>(this IDbConnection dbConn, T instance, string[] include = null, CancellationToken token = default(CancellationToken))
         {
-            return dbConn.Exec(dbCmd => dbCmd.LoadReferencesAsync(instance, token));
+            return dbConn.Exec(dbCmd => dbCmd.LoadReferencesAsync(instance, include, token));
         }
     }
 }
