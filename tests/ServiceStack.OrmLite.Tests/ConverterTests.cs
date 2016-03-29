@@ -10,6 +10,16 @@ namespace ServiceStack.OrmLite.Tests
     [TestFixture]
     public class ConverterTests : OrmLiteTestBase
     {
+        private struct TestStruct {}
+
+        [Test]
+        public void FromDbValue_does_not_throw_Exception()
+        {
+            var dialectProvider = OrmLiteConfig.DialectProvider;
+            var convertedValue = dialectProvider.FromDbValue(12345, typeof(TestStruct));
+            Assert.That(convertedValue, Is.Null);
+        }
+
         [Test]
         public void Can_insert_update_and_select_AllTypes()
         {

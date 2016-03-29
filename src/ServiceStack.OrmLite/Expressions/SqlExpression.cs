@@ -21,7 +21,7 @@ namespace ServiceStack.OrmLite
         private string groupBy = string.Empty;
         private string havingExpression;
         private string orderBy = string.Empty;
-        private string[] onlyFields = null;
+        public HashSet<string> OnlyFields { get; protected set; }
 
         public List<string> UpdateFields { get; set; }
         public List<string> InsertFields { get; set; }
@@ -72,7 +72,7 @@ namespace ServiceStack.OrmLite
             to.groupBy = groupBy;
             to.havingExpression = havingExpression;
             to.orderBy = orderBy;
-            to.onlyFields = onlyFields != null ? (string[])onlyFields.Clone() : null;
+            to.OnlyFields = OnlyFields != null ? new HashSet<string>(OnlyFields) : null;
             to.UpdateFields = UpdateFields;
             to.InsertFields = InsertFields;
             to.modelDef = modelDef;
@@ -114,7 +114,7 @@ namespace ServiceStack.OrmLite
             {
                 this.selectExpression = "SELECT " + rawSelect;
                 this.CustomSelect = true;
-                onlyFields = null;
+                OnlyFields = null;
             }
             return this;
         }
@@ -130,9 +130,38 @@ namespace ServiceStack.OrmLite
             if (fields == null || fields.Length == 0)
                 return Select(string.Empty);
 
+            var allTableDefs = new List<ModelDefinition> { modelDef };
+            allTableDefs.AddRange(tableDefs);
+
+            var fieldsList = new List<string>();
             var sb = new StringBuilder();
             foreach (var field in fields)
             {
+                if (string.IsNullOrEmpty(field))
+                    continue;
+
+                if (field.EndsWith(".*"))
+                {
+                    var tableName = field.Substring(0, field.Length - 2);
+                    var tableDef = allTableDefs.FirstOrDefault(x => string.Equals(x.Name, tableName, StringComparison.OrdinalIgnoreCase));
+                    if (tableDef != null)
+                    {
+                        foreach (var fieldDef in tableDef.FieldDefinitionsArray)
+                        {
+                            var qualifiedField = DialectProvider.GetQuotedColumnName(tableDef, fieldDef);
+
+                            if (sb.Length > 0)
+                                sb.Append(", ");
+
+                            sb.Append(qualifiedField);
+                            fieldsList.Add(fieldDef.Name);
+                        }
+                    }
+                    continue;
+                }
+
+                fieldsList.Add(field); //Could be non-matching referenced property
+
                 var match = FirstMatchingField(field);
                 if (match == null)
                     continue;
@@ -146,7 +175,7 @@ namespace ServiceStack.OrmLite
             }
 
             UnsafeSelect(sb.ToString());
-            onlyFields = fields;
+            OnlyFields = new HashSet<string>(fieldsList, StringComparer.OrdinalIgnoreCase);
 
             return this;
         }
@@ -268,18 +297,8 @@ namespace ServiceStack.OrmLite
 
                 if (sqlParams != null)
                 {
-                    var sbParams = new StringBuilder();
-                    foreach (var item in sqlParams.GetValues())
-                    {
-                        var p = AddParam(item);
-
-                        if (sbParams.Length > 0)
-                            sbParams.Append(",");
-
-                        sbParams.Append(p.ParameterName);
-                    }
-
-                    sqlFilter = sqlFilter.Replace(pLiteral, sbParams.ToString());
+                    var sqlIn = CreateInParamSql(sqlParams.GetValues());
+                    sqlFilter = sqlFilter.Replace(pLiteral, sqlIn);
                 }
                 else
                 {
@@ -288,6 +307,22 @@ namespace ServiceStack.OrmLite
                 }
             }
             return sqlFilter;
+        }
+
+        private string CreateInParamSql(IEnumerable values)
+        {
+            var sbParams = new StringBuilder();
+            foreach (var item in values)
+            {
+                var p = AddParam(item);
+
+                if (sbParams.Length > 0)
+                    sbParams.Append(",");
+
+                sbParams.Append(p.ParameterName);
+            }
+            var sqlIn = sbParams.ToString();
+            return sqlIn;
         }
 
         public virtual SqlExpression<T> UnsafeWhere(string rawSql, params object[] filterParams)
@@ -1520,7 +1555,7 @@ namespace ServiceStack.OrmLite
 
         private void BuildSelectExpression(string fields, bool distinct)
         {
-            onlyFields = null;
+            OnlyFields = null;
             selectDistinct = distinct;
 
             selectExpression = string.Format("SELECT {0}{1}",
@@ -1599,23 +1634,28 @@ namespace ServiceStack.OrmLite
 
             var inArgs = Sql.Flatten(getter() as IEnumerable);
 
-            var sIn = new StringBuilder();
+            string sqlIn = "NULL";
             if (inArgs.Count > 0)
             {
-                foreach (object e in inArgs)
+                var sIn = new StringBuilder();
+                if (OrmLiteConfig.UseParameterizeSqlExpressions)
                 {
-                    if (sIn.Length > 0)
-                        sIn.Append(",");
+                    sqlIn = CreateInParamSql(inArgs);
+                }
+                else
+                {
+                    foreach (object e in inArgs)
+                    {
+                        if (sIn.Length > 0)
+                            sIn.Append(",");
 
-                    sIn.Append(DialectProvider.GetQuotedValue(e, e.GetType()));
+                        sIn.Append(DialectProvider.GetQuotedValue(e, e.GetType()));
+                    }
+                    sqlIn = sIn.ToString();
                 }
             }
-            else
-            {
-                sIn.Append("NULL");
-            }
 
-            var statement = string.Format("{0} {1} ({2})", quotedColName, "In", sIn);
+            var statement = string.Format("{0} {1} ({2})", quotedColName, "In", sqlIn);
             return new PartialSqlString(statement);
         }
 
@@ -1663,20 +1703,36 @@ namespace ServiceStack.OrmLite
             var lambda = Expression.Lambda<Func<object>>(member);
             var getter = lambda.Compile();
             var argValue = getter();
+
+            if (argValue == null)
+                return "(1=0)"; // "column IN (NULL)" is always false
+
             var enumerableArg = argValue as IEnumerable;
             if (enumerableArg != null)
             {
                 var inArgs = Sql.Flatten(getter() as IEnumerable);
+                if (inArgs.Count == 0)
+                    return "(1=0)"; // "column IN ([])" is always false
 
-                var sIn = new StringBuilder();
-                foreach (var e in inArgs)
+                string sqlIn;
+                if (OrmLiteConfig.UseParameterizeSqlExpressions)
                 {
-                    if (sIn.Length > 0)
-                        sIn.Append(",");
-
-                    sIn.Append(DialectProvider.GetQuotedValue(e, e.GetType()));
+                    sqlIn = CreateInParamSql(inArgs);
                 }
-                return string.Format("{0} {1} ({2})", quotedColName, m.Method.Name, sIn);
+                else
+                {
+                    var sIn = new StringBuilder();
+                    foreach (var e in inArgs)
+                    {
+                        if (sIn.Length > 0)
+                            sIn.Append(",");
+
+                        sIn.Append(DialectProvider.GetQuotedValue(e, e.GetType()));
+                    }
+                    sqlIn = sIn.ToString();
+                }
+
+                return string.Format("{0} {1} ({2})", quotedColName, m.Method.Name, sqlIn);
             }
             
             var exprArg = argValue as ISqlExpression;

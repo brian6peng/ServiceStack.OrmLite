@@ -267,6 +267,8 @@ namespace ServiceStack.OrmLite
 
         public IOrmLiteConverter GetConverter(Type type)
         {
+            type = Nullable.GetUnderlyingType(type) ?? type;
+
             IOrmLiteConverter converter;
             return Converters.TryGetValue(type, out converter)
                 ? converter
@@ -361,6 +363,11 @@ namespace ServiceStack.OrmLite
                 return converter.GetValue(reader, columnIndex, null);
 
             return reader.GetValue(columnIndex);
+        }
+
+        public virtual int GetValues(IDataReader reader, object[] values)
+        {
+            return reader.GetValues(values);
         }
 
         public abstract IDbConnection CreateConnection(string filePath, Dictionary<string, string> options);

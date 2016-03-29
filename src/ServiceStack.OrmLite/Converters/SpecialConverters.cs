@@ -59,7 +59,7 @@ namespace ServiceStack.OrmLite.Converters
             if (strVal != null)
                 return Enum.Parse(fieldType, strVal, ignoreCase:true);
 
-            return Convert.ChangeType(value, fieldType.GetTypeCode());
+            return Enum.ToObject(fieldType, value);
         }
     }
 
@@ -155,7 +155,11 @@ namespace ServiceStack.OrmLite.Converters
 
         public override object FromDbValue(Type fieldType, object value)
         {
-            return DialectProvider.FromDbValue(value, fieldType);
+            if (fieldType.IsInstanceOfType(value))
+                return value;
+
+            var convertedValue = DialectProvider.StringSerializer.DeserializeFromString(value.ToString(), fieldType);
+            return convertedValue;
         }
     }
 }
